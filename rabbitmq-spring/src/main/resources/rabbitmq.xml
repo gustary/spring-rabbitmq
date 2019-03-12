@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>  
+<beans xmlns="http://www.springframework.org/schema/beans"  
+    xmlns:aop="http://www.springframework.org/schema/aop" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  
+    xmlns:p="http://www.springframework.org/schema/p" xmlns:mvc="http://www.springframework.org/schema/mvc"  
+    xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"  
+    xmlns:websocket="http://www.springframework.org/schema/websocket"  
+    xmlns:jpa="http://www.springframework.org/schema/data/jpa" xmlns:cache="http://www.springframework.org/schema/cache"  
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc" xmlns:rabbit="http://www.springframework.org/schema/rabbit"  
+    xmlns:task="http://www.springframework.org/schema/task"  
+    xsi:schemaLocation="http://www.springframework.org/schema/beans  
+    http://www.springframework.org/schema/beans/spring-beans.xsd  
+    http://www.springframework.org/schema/mvc  
+    http://www.springframework.org/schema/mvc/spring-mvc-4.1.xsd  
+    http://www.springframework.org/schema/aop  
+    http://www.springframework.org/schema/aop/spring-aop-4.1.xsd  
+    http://www.springframework.org/schema/context  
+    http://www.springframework.org/schema/context/spring-context-4.1.xsd  
+    http://www.springframework.org/schema/cache  
+    http://www.springframework.org/schema/cache/spring-cache-4.1.xsd  
+    http://www.springframework.org/schema/tx  
+    http://www.springframework.org/schema/tx/spring-tx-4.1.xsd  
+    http://www.springframework.org/schema/websocket  
+    http://www.springframework.org/schema/websocket/spring-websocket-4.1.xsd  
+    http://www.springframework.org/schema/data/jpa  
+    http://www.springframework.org/schema/data/jpa/spring-jpa-1.3.xsd  
+    http://www.springframework.org/schema/jdbc  
+    http://www.springframework.org/schema/jdbc/spring-jdbc-4.1.xsd  
+    http://www.springframework.org/schema/rabbit  
+    http://www.springframework.org/schema/rabbit/spring-rabbit-1.4.xsd  
+    http://www.springframework.org/schema/task  
+    http://www.springframework.org/schema/task/spring-task-4.1.xsd">     
+     
+     
+        <!-- 创建connectionFactory -->  
+        <!-- 
+        	channel-cache-size chanel缓存数量,connectionTimeout 连接超时时间
+        -->
+        <rabbit:connection-factory id="rabbitConnectionFactory"  virtual-host="/" addresses="${rabbit.address}"
+  	 		connection-timeout="10000"  channel-cache-size="10" username="admin" password="admin" />
+          
+        <!-- 创建rabbitAdmin 代理类 -->  
+       <bean id="rabbitAdmin" class="org.springframework.amqp.rabbit.core.RabbitAdmin">  
+           <constructor-arg ref="rabbitConnectionFactory" />  
+           <!-- 
+           		chanel缓存数量,线程执行器taskExecutor
+           		<property name="channelCacheSize" value="25" />  
+        		<property name="executor" ref="taskExecutor" /> 
+           -->
+       </bean>  
+       
+         <!-- 创建rabbitTemplate 消息模板类  需要手动传入exchang，routingKey 属性 reply-timeout--> 
+         <bean id="rabbitTemplate" class="org.springframework.amqp.rabbit.core.RabbitTemplate" >
+         	 <constructor-arg ref="rabbitConnectionFactory"/>
+         </bean>
+        
+      <!-- 声明Queue并设定Queue的名称    durable是否持久化默认false auto-delete自动删除，没有任何消费者订阅就自动删除 exclusive排他 -->  
+      <rabbit:queue name="task_queue"  durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+        <rabbit:queue name="hello"  durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" > 	
+        	<rabbit:queue-arguments >
+        		<!-- 死信路由器  -->
+        		<entry key="x-dead-letter-exchange" value="dead-letter-exchange" />
+        		<!-- 死信路由routingKey-->
+        		<entry key="x-dead-letter-routing-key" value="hello" />
+        	   <!-- 消息TTL过期 做延迟消费-->
+        	   <entry key="x-message-ttl">
+        	   		<value type="java.lang.Long">50000</value>
+        	   </entry>
+        	   <!--队列达到最大长度 ，超过最大长度就会丢失 -->
+        	   <entry key="x-max-length">
+        	   		 <value type="java.lang.Long">100</value>  
+        	   </entry>
+        	</rabbit:queue-arguments>
+        </rabbit:queue> 	
+        <rabbit:queue name="alter_message"  durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   		<rabbit:queue name="dead" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	
+   	  	<rabbit:queue name="dead" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	<rabbit:queue name="${rabbit.directQueue1}" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	<rabbit:queue name="${rabbit.directQueue2}" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	<rabbit:queue name="${rabbit.topicQueue}" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	<rabbit:queue name="${rabbit.fanoutQueue1}" durable="true" auto-delete="false"  exclusive="false" declared-by="rabbitAdmin" /> 	
+   	  	
+   	  <rabbit:topic-exchange name="testEx" durable="true" auto-delete="false" declared-by="rabbitAdmin" >
+     	<rabbit:exchange-arguments >
+    		<entry key="alternate-exchange" value="alter" />
+    	</rabbit:exchange-arguments>
+    	<rabbit:bindings>
+    		<rabbit:binding queue="hello" pattern="hello"></rabbit:binding>
+    		<rabbit:binding queue="task_queue" pattern="task_queue"></rabbit:binding>
+    	</rabbit:bindings>
+     </rabbit:topic-exchange>
+     <rabbit:topic-exchange name="dead-letter-exchange" durable="true" auto-delete="false" declared-by="rabbitAdmin" >
+     	<rabbit:bindings>
+     		<!-- routingKey = dead-letter-exchange 属性的queue 中定义的 x-dead-letter-routing-key-->
+     		<rabbit:binding queue="dead" pattern="hello"></rabbit:binding>
+     	</rabbit:bindings>
+      </rabbit:topic-exchange>
+     
+     <rabbit:fanout-exchange name="alter">
+     	<rabbit:exchange-arguments >
+     		<!-- 是否是内部路由 true客户端不能发布消息到此交换机，只能通过其他交换机一起使用  -->
+    		<entry key="internal" value="true" />
+    	</rabbit:exchange-arguments>
+    	<rabbit:bindings>
+    		<rabbit:binding queue="alter_message"/>	
+    	</rabbit:bindings>
+    </rabbit:fanout-exchange>
+    
+    <!-- 定义监听器工厂-->
+    <!-- 
+    <bean id="rabbitListenerContainerFactory" class="org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory">  
+        <property name="connectionFactory" ref="rabbitConnectionFactory" />  
+        <property name="transactionManager" ref="transactionManager" />  
+        <property name="concurrentConsumers" value="1" />  
+        <property name="maxConcurrentConsumers" value="10" />  
+        <property name="messageConverter" ref="jsonMessageConverter" />  
+        <property name="taskExecutor" ref="taskExecutor" />  
+        <property name="channelTransacted" value="true" />  
+        <property name="adviceChain">  
+            <array>  
+                <ref bean="retryInterceptor" />  
+            </array>  
+        </property>  
+    </bean>  
+    -->
+    
+    <!-- 定义监听器容器-->
+   
+      <!-- queue listener  观察 监听模式 当有消息到达时会通知监听在对应的队列上的监听对象    listener == consumer -->
+    <!-- acknowledge=""消息应答模式 manua手动，auto自动默认，消息一发送，就确认消息应答（即不需要回调）== 关闭应答模式
+    	auto-startup是否在启动时就启动mq，默认: true concurrency(max-concurrency)指定最小的消费者数量 
+    	prefetch=""指定一个请求能处理多少个消息,如果有事务的话，必须大于等于transaction数量 
+    	transaction-size 指定一个事务处理的消息数量，最好是小于等于prefetch的数量     error-handler="errorHandler"
+    	concurrency= 用来为每个listener配置并发的消费者个数的
+    -->
+     <rabbit:listener-container connection-factory="rabbitConnectionFactory" acknowledge="manual" prefetch="1" concurrency="2">  
+        <rabbit:listener queues="${rabbit.directQueue1}" ref="directQueueMessageListener" />  
+        <rabbit:listener queues="${rabbit.directQueue2}" ref="directQueueMessageListener"/>
+        <rabbit:listener queues="${rabbit.topicQueue}"  ref="topicQueueMessageListener" />  
+   		<rabbit:listener queues="${rabbit.fanoutQueue1}" ref="fanoutQueueMessageListener"/>
+   		<rabbit:listener queues="hello" ref="topicQueueMessageListener" /> 
+    </rabbit:listener-container>
+</beans>  
