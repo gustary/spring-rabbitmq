@@ -4,17 +4,16 @@ import java.io.IOException;
 
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import rabbitmq.producer.biz.MessageProducerBiz;
 
 import com.rabbitmq.client.AMQP.BasicProperties;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.ReturnListener;
+
+import rabbitmq.producer.biz.MessageProducerBiz;
 
 /**
  * 文件名：MessageProducer.java
@@ -31,14 +30,12 @@ public class MessageProducerBizImpl implements MessageProducerBiz {
 	@Autowired
 	private CachingConnectionFactory rabbitConnectionFactory;
 
-	@Autowired
-	private RabbitAdmin rabbitAdmin;
-
 	/**
 	 * 发布 message
 	 * rabbitTemplate绑定exchange,routingKey属性值
 	 * @param message
 	 */
+	@Override
 	public void mqRoute(Object message) {
 		rabbitTemplate.convertAndSend(message);
 	}
@@ -51,6 +48,7 @@ public class MessageProducerBizImpl implements MessageProducerBiz {
 	 * 作者：kj00023
 	 * 日期：2017年6月29日上午11:33:10
 	 */
+	@Override
 	public void mqRoute(String exchange, String routingKey, Object message) {
 		rabbitTemplate.convertAndSend(exchange, routingKey, message);
 
@@ -97,6 +95,7 @@ public class MessageProducerBizImpl implements MessageProducerBiz {
 
 		// 问题 chanel不是同一,是否能监听到 预期不能
 		channel.addReturnListener(new ReturnListener() {
+			@Override
 			public void handleReturn(int arg0, String arg1, String arg2, String arg3, BasicProperties arg4, byte[] arg5)
 					throws IOException {
 				String message = new String(arg5);
